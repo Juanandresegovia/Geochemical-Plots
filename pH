@@ -1,0 +1,291 @@
+
+#Set working folder
+setwd("~/OneDrive - Montana Tech/LEGEND_JAC/Research_Project/R & GIS/Data Analysis")
+
+setwd("C:/Users/jchangoluisasegov/OneDrive - Montana Tech/LEGEND_JAC/Research_Project/R & GIS/Data Analysis")
+
+#Command + Option + T
+
+# Inital Libraries --------------------------------------------------------
+
+
+library("openxlsx");library("zoo");library("dplyr");library("tidyverse")
+library("ggplot2");library("reshape2");library("Hmisc");library("readxl")
+library("patchwork");library("hrbrthemes");library("lubridate");library("extrafont")
+library('wesanderson');library('gridExtra');library('ggalt'); library("RColorBrewer")
+library('ggforce');library('gganimate');library('gifski'); library("colorspace")
+
+# Function Seasons --------------------------------------------------------
+getSeason <- function(DATES) {
+  WS <- as.Date("2012-12-15", format = "%Y-%m-%d") # Winter Solstice
+  SE <- as.Date("2012-3-15",  format = "%Y-%m-%d") # Spring Equinox
+  SS <- as.Date("2012-6-15",  format = "%Y-%m-%d") # Summer Solstice
+  FE <- as.Date("2012-9-15",  format = "%Y-%m-%d") # Fall Equinox
+  
+  # Convert dates from any year to 2012 dates
+  d <- as.Date(strftime(DATES, format="2012-%m-%d"))
+  
+  ifelse (d >= WS | d < SE, "Winter",
+          ifelse (d >= SE & d < SS, "Spring",
+                  ifelse (d >= SS & d < FE, "Summer", "Fall")))
+}
+# Pre - Proccessing  ------------------------------------------------------
+
+#Read Excel spreadsheet 
+data1<-read_excel("210105_master_SB_UCF.xlsx",col_types = "guess",sheet = "Project",col_names = TRUE)
+colnames(data1)
+
+xxl<-select(data1,'Dte',
+            'Area',
+            "pH Field",
+            'Conductivity (non-flash) (uS/cm)',
+            "Specific Conductivity (Flash)(uS/cm)",
+            "SampleID",
+            'Cond. Temp. (°C)',
+            'SiO2 (mg/L)',
+            'D.O. Meter (mg/L)')
+
+
+names<- c("Drummond: Below Flint Creek","Garrison: Below Little Blackfoot","Below Warm Springs",
+          "Warm Springs USGS","Above Warm Springs","SBC Below German Gulch","*German Gulch",
+          "SBC Above German Gulch","Miles Crossing","Below Butte Area One","Below Discharge (Slag Canyon)",
+          "Above Discharge (KOA)","*Seasonal Upper SBC","*Storm Drain",'Control: Blacktail Creek')
+names<- rev(names)
+areas<-c('BTC','BA1','SBC','UCF')
+
+xxlcontrol<-filter(xxl,SampleID=='Control: Blacktail Creek')
+
+xxl<- xxl %>% arrange(factor(SampleID,levels = names))%>%na.omit(xxl)
+xxl<-cbind(xxl,Season=getSeason(ymd(xxl$Dte)));xxl<-filter(xxl,Area!='BTC')  
+
+mycolors <-  c(brewer.pal(name="Paired", n = 8), brewer.pal(name="Dark2", n = 6))
+mycolors<-rev(mycolors)
+
+seacolors <- c("brown","white","yellow","pink")
+
+seasons <- data.frame(xstart = seq(ymd("180901"), ymd("201101"), by = "+3 month"), 
+                      xend = seq(ymd("181201"), ymd("201201"), by = "+3 month"),
+                      Season=c("Fall","Winter","Spring","Summer","Fall","Winter","Spring","Summer","Fall"))
+# Graph -------------------------------------------------------------------
+
+#pH Field (Time Series)
+
+graph<- ggplot(xxl, aes(ymd(`Dte`),`pH Field`
+                        ,color= factor(SampleID,levels = names))) +
+  geom_line(stat = "identity",linetype = "dashed",size=2) + 
+  geom_point(size=5)+
+  geom_rect(data = seasons, aes(xmin = ymd(xstart), xmax = ymd(xend), ymin=-Inf, ymax=Inf, fill = Season),
+            inherit.aes = FALSE,alpha=0.2)+
+  annotate(geom = 'line', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,
+           color='red',linetype="dashed",size=3)+
+  annotate(geom = 'point', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,size=3,color='red')+
+  annotate(geom = 'text', x=ymd('180905'), y=9.2,color='blue',label='pH= 9',size=4)+
+  annotate(geom = 'text', x=ymd('180905'), y=7.3,color='red',label='pH= 7.5',size=4)+
+  #ggtitle("Conductivity (uS/cm) Nov 2018 - Sept 2020") +
+  ggtitle("") +
+  geom_vline(xintercept = as.numeric(ymd("191031")))+
+  geom_hline(yintercept = 7.5,linetype="dotted",color="red")+
+  geom_hline(yintercept = 9,linetype="dotted",color="blue")+
+  scale_x_date(date_labels = "%y %b")+
+  facet_grid(Area~.) + 
+  xlab("") + ylab ("pH")  +  
+  scale_color_manual(values=mycolors,name="Sites")+
+  theme_bw()+
+  theme(legend.title = element_text(size = 20,face="bold"),
+        text = element_text(size = 15,face="bold"),
+        legend.text = element_text(size = 15,face="italic"),
+        axis.title.y = element_text(size = 30),
+        axis.text = element_text(size = 20,face = "bold"))+
+  theme(legend.position = "right") +
+  guides(color = guide_legend(ncol = 1, bycol = TRUE),
+         fill=guide_legend(ncol = 2, bycol = TRUE))
+
+ 
+
+ggsave(plot = graph, file ="pH_2018_2020.png", device = "png", width = 16, 
+       height = 9, units = "in", dpi = 350) 
+
+
+# Butte Area One------------------------------------------------------------------------------------------------
+
+xxl<-filter(xxl,Area=='Butte Area')
+names<-c("Below Discharge (Slag Canyon)","Above Discharge (KOA)",
+         "*Seasonal Upper SBC","*Storm Drain",
+         'Control: Blacktail Creek')
+names<- rev(names)
+
+graph<- ggplot(xxl, aes(ymd(`Dte`),`pH Field`
+                        ,color= factor(SampleID,levels = names))) +
+  geom_line(stat = "identity",linetype = "dashed",size=2) + 
+  geom_point(size=5)+
+  geom_rect(data = seasons, aes(xmin = ymd(xstart), xmax = ymd(xend), ymin=-Inf, ymax=Inf, fill = Season),
+            inherit.aes = FALSE,alpha=0.2)+
+  annotate(geom = 'line', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,
+           color='red',linetype="dashed",size=3)+
+  annotate(geom = 'point', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,size=3,color='red')+
+  annotate(geom = 'text', x=ymd('200405'), y=54.3,color='red',label='Control',size=6)+
+  #ggtitle("Conductivity (uS/cm) Nov 2018 - Sept 2020") +
+  ggtitle("") +
+  geom_vline(xintercept = as.numeric(ymd("191031")))+
+  scale_x_date(date_labels = "%y %b")+
+  facet_grid(Area~.) + 
+  xlab("") + ylab ("Conductivity (uS/cm)")  +  
+  scale_color_manual(values=mycolors,name="Sites")+
+  theme_bw()+
+  theme(legend.title = element_text(size = 20,face="bold"),
+        text = element_text(size = 30,face="bold"),
+        legend.text = element_text(size = 15,face="italic"),
+        axis.title.y = element_text(size = 30),
+        axis.text = element_text(size = 20,face = "bold"))+
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(ncol = 2, bycol = TRUE),
+         fill=guide_legend(ncol = 2, bycol = TRUE))+
+  transition_reveal(ymd(Dte))+
+  ease_aes('linear')
+
+animate(graph, duration = 10, fps = 1, width = 16, height = 9, renderer = gifski_renderer(), res= 350,units="in")
+anim_save("Conducitivity_BAO.gif")
+
+
+ggsave(plot = graph,file="Area_Conduc_ButteArea_2018_2020.png", device = "png", width = 16, 
+       height = 9, units = "in", dpi = 350)
+# SBC ------------------------------------------------------------------------------------
+xxl<-filter(xxl,Area=='Silver Bow Creek')
+names<-c("SBC Below German Gulch","*German Gulch",
+         "SBC Above German Gulch","Miles Crossing",
+         "Below Butte Area One")
+names<- rev(names)
+
+graph<- ggplot(xxl, aes(ymd(`Dte`),`pH Field`
+                        ,color= factor(SampleID,levels = names))) +
+  geom_line(stat = "identity",linetype = "dashed",size=2) + 
+  geom_point(size=5)+
+  geom_rect(data = seasons, aes(xmin = ymd(xstart), xmax = ymd(xend), ymin=-Inf, ymax=Inf, fill = Season),
+            inherit.aes = FALSE,alpha=0.2)+
+  annotate(geom = 'line', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,
+           color='red',linetype="dashed",size=3)+
+  annotate(geom = 'point', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,size=3,color='red')+
+  annotate(geom = 'text', x=ymd('200405'), y=54.3,color='red',label='Control',size=6)+
+  #ggtitle("Conductivity (uS/cm) Nov 2018 - Sept 2020") +
+  ggtitle("") +
+  geom_vline(xintercept = as.numeric(ymd("191031")))+
+  scale_x_date(date_labels = "%y %b")+
+  facet_grid(Area~.) + 
+  xlab("") + ylab ("Conductivity (uS/cm)")  +  
+  scale_color_manual(values=mycolors,name="Sites")+
+  theme_bw()+
+  theme(legend.title = element_text(size = 20,face="bold"),
+        text = element_text(size = 30,face="bold"),
+        legend.text = element_text(size = 15,face="italic"),
+        axis.title.y = element_text(size = 30),
+        axis.text = element_text(size = 20,face = "bold"))+
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(ncol = 2, bycol = TRUE),
+         fill=guide_legend(ncol = 2, bycol = TRUE))+
+  transition_reveal(ymd(Dte))+
+  ease_aes('linear')
+
+animate(graph, duration = 10, fps = 1, width = 16, height = 9, renderer = gifski_renderer(), res= 350,units="in")
+anim_save("Conducitivity_SBC.gif")
+
+
+ggsave(plot = graph,file="Area_Conduc_SBC_2018_2020.png", device = "png", width = 16, 
+       height = 9, units = "in", dpi = 350)
+
+# UCF --------------------------------------------------------------
+
+xxl<-filter(xxl,Area=='Upper Clark Fork')
+names<-c("Drummond: Below Flint Creek","Garrison: Below Little Blackfoot",
+         "Below Warm Springs","Warm Springs USGS","Above Warm Springs")
+
+names<- rev(names)
+
+graph<- ggplot(xxl, aes(ymd(`Dte`),`pH Field`
+                        ,color= factor(SampleID,levels = names))) +
+  geom_line(stat = "identity",linetype = "dashed",size=2) + 
+  geom_point(size=5)+
+  geom_rect(data = seasons, aes(xmin = ymd(xstart), xmax = ymd(xend), ymin=-Inf, ymax=Inf, fill = Season),
+            inherit.aes = FALSE,alpha=0.2)+
+  annotate(geom = 'line', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,
+           color='red',linetype="dashed",size=3)+
+  annotate(geom = 'point', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,size=3,color='red')+
+  annotate(geom = 'text', x=ymd('200405'), y=54.3,color='red',label='Control',size=6)+
+  #ggtitle("Conductivity (uS/cm) Nov 2018 - Sept 2020") +
+  ggtitle("") +
+  geom_vline(xintercept = as.numeric(ymd("191031")))+
+  scale_x_date(date_labels = "%y %b")+
+  facet_grid(Area~.) + 
+  xlab("") + ylab ("Conductivity (uS/cm)")  +  
+  scale_color_manual(values=mycolors,name="Sites")+
+  theme_bw()+
+  theme(legend.title = element_text(size = 20,face="bold"),
+        text = element_text(size = 30,face="bold"),
+        legend.text = element_text(size = 15,face="italic"),
+        axis.title.y = element_text(size = 30),
+        axis.text = element_text(size = 20,face = "bold"))+
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(ncol = 2, bycol = TRUE),
+         fill=guide_legend(ncol = 2, bycol = TRUE))+
+  transition_reveal(ymd(Dte))+
+  ease_aes('linear')
+
+animate(graph, duration = 10, fps = 1, width = 16, height = 9, renderer = gifski_renderer(), res= 350,units="in")
+anim_save("Conducitivity_UCF.gif")
+
+
+ggsave(plot = graph,file="Area_Conduc_UCF_2018_2020.png", device = "png", width = 16, 
+       height = 9, units = "in", dpi = 350)
+
+# Gif Downstream ---------------------------------------------------------------------------
+
+`%notin%` <- Negate(`%in%`)
+
+xxl <- xxl %>% 
+  filter(SampleID %notin% c("*Seasonal Upper SBC","*Storm Drain",
+                            "Above Discharge (KOA)","*German Gulch"))         
+
+
+names<- c("Drummond: Below Flint Creek","Garrison: Below Little Blackfoot","Below Warm Springs",
+          "Warm Springs USGS","Above Warm Springs","SBC Below German Gulch","*German Gulch",
+          "SBC Above German Gulch","Miles Crossing","Below Butte Area One","Below Discharge (Slag Canyon)",
+          "Above Discharge (KOA)","*Seasonal Upper SBC","*Storm Drain",'Control: Blacktail Creek')
+names<- rev(names)
+
+
+
+graph<- ggplot(xxl, aes(ymd(`Dte`),`pH Field`
+                        ,color= factor(SampleID,levels = names))) +
+  geom_line(stat = "identity",linetype = "dashed",size=3) + 
+  geom_point(size=3)+
+  geom_rect(data = seasons, aes(xmin = ymd(xstart), xmax = ymd(xend), ymin=-Inf, ymax=Inf, fill = Season),
+            inherit.aes = FALSE,alpha=0.2)+
+  annotate(geom = 'line', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,
+           color='red',linetype="dashed",size=3)+
+  annotate(geom = 'point', x=ymd(xxlcontrol$Dte), y=xxlcontrol$`pH Field`,color='red',size=3)+
+  annotate(geom = 'text', x=ymd('200405'), y=54.3,color='red',label='Control',size=6)+
+  #ggtitle("Conductivity (uS/cm) Nov 2018 - Sept 2020") +
+  geom_vline(xintercept = as.numeric(ymd("191031")))+
+  scale_x_date(date_labels = "%y %b")+
+  xlab("") + ylab ("Conductivity (uS/cm)")  +  
+  scale_color_manual(values=mycolors,name="Sites")+
+  theme_bw()+
+  
+  theme(legend.title = element_text(size = 20,face="bold"),
+        text = element_text(size = 30,face="bold"),
+        legend.text = element_text(size = 15,face="italic"),
+        axis.title.y = element_text(size = 30),
+        axis.text = element_text(size = 20,face = "bold"))+
+  theme(legend.position = "bottom") +
+  guides(fill=guide_legend(ncol = 2, bycol = TRUE),
+         color = guide_legend(ncol = 3, bycol = TRUE))+
+  transition_manual(factor(SampleID, levels = names),cumulative = TRUE)+
+  shadow_mark()
+
+
+
+animate(graph, duration = 10, width = 16, height = 9, renderer = gifski_renderer(), res= 350,units="in")
+anim_save("Conducitivity_Downstream_VS2.gif")
+
+
+ggsave(plot = graph, file="Conduc_Downstream_2018_2020.png", device = "png", width = 16, 
+       height = 9, units = "in", dpi = 350) 
